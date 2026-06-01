@@ -11,6 +11,7 @@ Run:
   python trading_bot.py
 """
 
+import os
 import time
 import logging
 import datetime
@@ -23,14 +24,21 @@ from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 # ─────────────────────────────────────────────
-# CONFIG — your Alpaca paper trading credentials
+# CONFIG — reads API keys from environment variables (secure)
 # ─────────────────────────────────────────────
-API_KEY    = "AKTPKV5ZZVT5TQ5KFXTKO3K225"
-SECRET_KEY = "AKDDc4rPH8kc2hxA7ayrBcQX7moF1HFUtZG4UKVCT3UX"
+API_KEY    = os.environ.get("ALPACA_API_KEY", "").strip()
+SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "").strip()
 PAPER      = False  # ← LIVE trading with real money
+
+if not API_KEY or not SECRET_KEY:
+    raise ValueError("Missing ALPACA_API_KEY or ALPACA_SECRET_KEY environment variables!")
+
+# Debug: print first 4 chars of key to verify it loaded (safe to log)
+print(f"[DEBUG] API_KEY loaded: {API_KEY[:4]}... (length: {len(API_KEY)})")
+print(f"[DEBUG] SECRET_KEY loaded: {SECRET_KEY[:4]}... (length: {len(SECRET_KEY)})")
 
 # ─────────────────────────────────────────────
 # STRATEGY SETTINGS
@@ -88,7 +96,7 @@ def get_bars(symbol: str, lookback_days: int = 5) -> pd.DataFrame:
     start = end - datetime.timedelta(days=lookback_days)
     req   = StockBarsRequest(
         symbol_or_symbols=symbol,
-        timeframe=TimeFrame.Minute * 15,  # 15-min bars
+        timeframe=TimeFrame(15, TimeFrameUnit.Minute),  # 15-min bars
         start=start,
         end=end,
     )
