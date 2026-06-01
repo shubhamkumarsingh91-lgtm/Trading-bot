@@ -99,6 +99,7 @@ def get_bars(symbol: str, lookback_days: int = 5) -> pd.DataFrame:
         timeframe=TimeFrame(15, TimeFrameUnit.Minute),  # 15-min bars
         start=start,
         end=end,
+        feed="iex",  # free data feed for free Alpaca accounts
     )
     bars = data_client.get_stock_bars(req).df
     if isinstance(bars.index, pd.MultiIndex):
