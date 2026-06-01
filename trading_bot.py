@@ -55,6 +55,12 @@ MA_LONG            = 21     # slow moving average periods
 # TRAILING STOP — locks in profit as stock moves up
 TRAILING_STOP_PCT  = 0.05   # sell if stock drops 5% from its peak after buying
 
+# SWING TRADING — avoids PDT rule (Pattern Day Trader)
+# PDT rule: accounts under $25k can only make 3 day trades per 5 days
+# Solution: hold winning positions overnight, only close losers same day
+SWING_TRADING      = True   # True = hold winners overnight, False = close everything EOD
+MIN_PROFIT_TO_HOLD = 0.02   # hold overnight only if position is up at least 2%
+
 # ─────────────────────────────────────────────
 # LOGGING
 # ─────────────────────────────────────────────
@@ -73,6 +79,9 @@ log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
 data_client    = StockHistoricalDataClient(API_KEY, SECRET_KEY)
+
+# Track which stocks were bought TODAY — never sell these same day (PDT protection)
+bought_today = set()  # e.g. {"CRWD", "GTLB"}
 
 
 # ─────────────────────────────────────────────
@@ -142,7 +151,7 @@ def place_buy(symbol: str, price: float):
         symbol=symbol,
         qty=qty,
         side=OrderSide.BUY,
-        time_in_force=TimeInForce.DAY,
+        time_in_force=TimeInForce.GTC,  # GTC = Good Till Cancelled — works for swing trading
     )
     order = trading_client.submit_order(req)
     log.info(f"✅ BUY {qty} shares of {symbol} @ ~${price:.2f} | Order ID: {order.id}")
@@ -150,6 +159,10 @@ def place_buy(symbol: str, price: float):
     stop  = round(price * (1 - RISK_PER_TRADE_PCT), 2)
     target = round(price * (1 + PROFIT_TARGET_PCT), 2)
     log.info(f"   Stop Loss: ${stop} | Take Profit: ${target}")
+    log.info(f"   🛡️ PDT Protection ON — will NOT sell {symbol} today")
+
+    # Mark this stock as bought today — prevents same-day sell (PDT protection)
+    bought_today.add(symbol)
     return order
 
 
@@ -158,7 +171,7 @@ def place_sell(symbol: str, qty: float):
         symbol=symbol,
         qty=int(qty),
         side=OrderSide.SELL,
-        time_in_force=TimeInForce.DAY,
+        time_in_force=TimeInForce.GTC,  # GTC = works anytime market is open
     )
     order = trading_client.submit_order(req)
     log.info(f"🔴 SELL {int(qty)} shares of {symbol} | Order ID: {order.id}")
@@ -225,15 +238,20 @@ def monitor_positions():
 
         log.info(f"[{symbol}] Entry=${entry_price:.2f} | Now=${current_price:.2f} | Peak=${peak_price:.2f} | PnL={pnl_pct*100:.1f}%")
 
-        # Hard stop loss — protect capital
+        # ⚠️ PDT PROTECTION — never sell same day we bought
+        if symbol in bought_today:
+            log.info(f"[{symbol}] 🛡️ PDT PROTECTION — bought today, will NOT sell until tomorrow minimum")
+            continue  # skip all sell logic for today
+
+        # Hard stop loss — protect capital (only triggers if bought on previous day)
         if pnl_pct <= -RISK_PER_TRADE_PCT:
-            log.warning(f"[{symbol}] 🛑 STOP LOSS at {pnl_pct*100:.1f}%")
+            log.warning(f"[{symbol}] 🛑 STOP LOSS at {pnl_pct*100:.1f}% — selling now (bought previous day)")
             place_sell(symbol, qty)
             peak_prices.pop(symbol, None)
 
         # Trailing stop — lock in profits (only activates after 5% gain)
         elif pnl_pct >= 0.05 and drop_from_peak >= TRAILING_STOP_PCT:
-            log.info(f"[{symbol}] 🔒 TRAILING STOP — dropped {drop_from_peak*100:.1f}% from peak ${peak_price:.2f} | Locking profit at {pnl_pct*100:.1f}%")
+            log.info(f"[{symbol}] 🔒 TRAILING STOP — dropped {drop_from_peak*100:.1f}% from peak | Profit locked at {pnl_pct*100:.1f}%")
             place_sell(symbol, qty)
             peak_prices.pop(symbol, None)
 
@@ -252,13 +270,72 @@ def is_market_open() -> bool:
     return clock.is_open
 
 
+def should_hold_overnight(symbol: str, pnl_pct: float) -> bool:
+    """
+    Decides whether to hold a position overnight based on:
+    1. Is it profitable? (minimum 2%)
+    2. Is the trend still bullish? (MA9 still above MA21)
+    3. Is RSI not dangerously overbought? (below 80)
+    If all 3 conditions met → HOLD for more profit tomorrow
+    """
+    try:
+        bars     = get_bars(symbol)
+        closes   = bars["close"]
+        ma_short = compute_ma(closes, MA_SHORT)
+        ma_long  = compute_ma(closes, MA_LONG)
+        rsi      = compute_rsi(closes)
+
+        trend_bullish    = ma_short > ma_long       # uptrend still intact
+        not_overbought   = rsi < 80                 # not too hot to hold
+        profitable       = pnl_pct >= MIN_PROFIT_TO_HOLD  # making money
+
+        log.info(f"[{symbol}] Overnight check → PnL={pnl_pct*100:.1f}% | Trend={'UP' if trend_bullish else 'DOWN'} | RSI={rsi:.1f}")
+
+        if profitable and trend_bullish and not_overbought:
+            return True  # ✅ Hold overnight
+        elif profitable and not trend_bullish:
+            log.info(f"[{symbol}] Trend weakening — taking profit today instead of holding")
+            return False
+        elif pnl_pct < 0:
+            log.info(f"[{symbol}] Losing position — closing today, not holding overnight")
+            return False
+        else:
+            return False
+
+    except Exception as e:
+        log.error(f"[{symbol}] Overnight check error: {e}")
+        return False  # if unsure, close it
+
+
 def close_all_positions_eod():
-    """Close all open positions 5 min before market close (3:55 PM ET)"""
-    log.info("⏰ End of day — closing all open positions")
+    """
+    Smart Swing Trading EOD Logic:
+    ✅ Hold overnight if: profitable + trend still up + RSI not overbought
+    ✅ Close today if: losing OR trend reversing OR RSI too high
+    This avoids PDT rule AND captures multi-day momentum moves
+    """
+    log.info("⏰ End of day — Smart swing trading review...")
     for symbol in WATCHLIST:
         pos = get_position(symbol)
-        if pos:
-            place_sell(symbol, float(pos.qty))
+        if not pos:
+            continue
+
+        entry_price   = float(pos.avg_entry_price)
+        current_price = float(pos.current_price)
+        qty           = float(pos.qty)
+        pnl_pct       = (current_price - entry_price) / entry_price
+
+        if SWING_TRADING and should_hold_overnight(symbol, pnl_pct):
+            log.info(f"[{symbol}] 🌙 HOLDING OVERNIGHT — up {pnl_pct*100:.1f}% | Trend UP | Will sell tomorrow for more profit")
+            log.info(f"[{symbol}]    Entry=${entry_price:.2f} | Current=${current_price:.2f} | Unrealized profit=${(current_price-entry_price)*qty:.2f}")
+        else:
+            if pnl_pct > 0:
+                log.info(f"[{symbol}] 💰 SELLING — taking {pnl_pct*100:.1f}% profit today (trend weakening)")
+            else:
+                log.warning(f"[{symbol}] 🛑 SELLING — closing {pnl_pct*100:.1f}% loss, not holding overnight")
+            place_sell(symbol, qty)
+
+    log.info("⏰ EOD complete — overnight positions will be monitored tomorrow at open")
 
 
 # ─────────────────────────────────────────────
@@ -310,7 +387,14 @@ if __name__ == "__main__":
     # Run every 15 minutes during market hours
     schedule.every(15).minutes.do(run_strategy)
 
-    # Close all positions at end of day (3:55 PM ET)
+    # Reset bought_today tracker at midnight — fresh start each day
+    def reset_daily_tracker():
+        bought_today.clear()
+        log.info("🔄 New trading day — PDT tracker reset")
+
+    schedule.every().day.at("00:00").do(reset_daily_tracker)
+
+    # EOD swing trading review at 3:55 PM ET
     schedule.every().monday.at("15:55").do(close_all_positions_eod)
     schedule.every().tuesday.at("15:55").do(close_all_positions_eod)
     schedule.every().wednesday.at("15:55").do(close_all_positions_eod)
