@@ -45,12 +45,15 @@ print(f"[DEBUG] SECRET_KEY loaded: {SECRET_KEY[:4]}... (length: {len(SECRET_KEY)
 # ─────────────────────────────────────────────
 WATCHLIST = ["CRWD", "AVGO", "SNOW", "PANW", "GTLB"]   # stocks to watch — updated June 2 2026
 MAX_POSITION_USD   = 100    # $100 per stock = $500 spread across 5 stocks
-RISK_PER_TRADE_PCT = 0.02   # stop loss = 2% below entry
-PROFIT_TARGET_PCT  = 0.04   # take profit = 4% above entry
+RISK_PER_TRADE_PCT = 0.03   # stop loss = 3% below entry
+PROFIT_TARGET_PCT  = 0.20   # take profit = 20% — capture big earnings moves
 RSI_OVERSOLD       = 35     # buy signal threshold
-RSI_OVERBOUGHT     = 65     # sell signal threshold
+RSI_OVERBOUGHT     = 75     # sell signal threshold
 MA_SHORT           = 9      # fast moving average periods
 MA_LONG            = 21     # slow moving average periods
+
+# TRAILING STOP — locks in profit as stock moves up
+TRAILING_STOP_PCT  = 0.05   # sell if stock drops 5% from its peak after buying
 
 # ─────────────────────────────────────────────
 # LOGGING
@@ -197,12 +200,15 @@ def get_signal(symbol: str) -> str:
 
 
 # ─────────────────────────────────────────────
-# POSITION MONITOR (stop loss / take profit)
+# POSITION MONITOR (stop loss / trailing stop / take profit)
 # ─────────────────────────────────────────────
+peak_prices = {}  # tracks highest price reached per position
+
 def monitor_positions():
     for symbol in WATCHLIST:
         pos = get_position(symbol)
         if not pos:
+            peak_prices.pop(symbol, None)  # reset peak if no position
             continue
 
         entry_price   = float(pos.avg_entry_price)
@@ -210,17 +216,32 @@ def monitor_positions():
         qty           = float(pos.qty)
         pnl_pct       = (current_price - entry_price) / entry_price
 
-        log.info(f"[{symbol}] Position: {qty} shares | Entry=${entry_price:.2f} | Now=${current_price:.2f} | PnL={pnl_pct*100:.1f}%")
+        # Track highest price reached
+        if symbol not in peak_prices or current_price > peak_prices[symbol]:
+            peak_prices[symbol] = current_price
 
-        # Stop loss hit
+        peak_price    = peak_prices[symbol]
+        drop_from_peak = (peak_price - current_price) / peak_price
+
+        log.info(f"[{symbol}] Entry=${entry_price:.2f} | Now=${current_price:.2f} | Peak=${peak_price:.2f} | PnL={pnl_pct*100:.1f}%")
+
+        # Hard stop loss — protect capital
         if pnl_pct <= -RISK_PER_TRADE_PCT:
-            log.warning(f"[{symbol}] 🛑 STOP LOSS triggered at {pnl_pct*100:.1f}%")
+            log.warning(f"[{symbol}] 🛑 STOP LOSS at {pnl_pct*100:.1f}%")
             place_sell(symbol, qty)
+            peak_prices.pop(symbol, None)
 
-        # Take profit hit
-        elif pnl_pct >= PROFIT_TARGET_PCT:
-            log.info(f"[{symbol}] 🎯 TAKE PROFIT triggered at {pnl_pct*100:.1f}%")
+        # Trailing stop — lock in profits (only activates after 5% gain)
+        elif pnl_pct >= 0.05 and drop_from_peak >= TRAILING_STOP_PCT:
+            log.info(f"[{symbol}] 🔒 TRAILING STOP — dropped {drop_from_peak*100:.1f}% from peak ${peak_price:.2f} | Locking profit at {pnl_pct*100:.1f}%")
             place_sell(symbol, qty)
+            peak_prices.pop(symbol, None)
+
+        # Max take profit safety net at 20%
+        elif pnl_pct >= PROFIT_TARGET_PCT:
+            log.info(f"[{symbol}] 🎯 MAX TAKE PROFIT at {pnl_pct*100:.1f}%")
+            place_sell(symbol, qty)
+            peak_prices.pop(symbol, None)
 
 
 # ─────────────────────────────────────────────
