@@ -43,8 +43,8 @@ print(f"[DEBUG] SECRET_KEY loaded: {SECRET_KEY[:4]}... (length: {len(SECRET_KEY)
 # ─────────────────────────────────────────────
 # STRATEGY SETTINGS
 # ─────────────────────────────────────────────
-WATCHLIST = ["SNOW", "GTLB", "PANW", "DG"]   # stocks to watch
-MAX_POSITION_USD   = 500    # max dollars per trade
+WATCHLIST = ["CRWD", "AVGO", "SNOW", "PANW", "GTLB"]   # stocks to watch — updated June 2 2026
+MAX_POSITION_USD   = 100    # $100 per stock = $500 spread across 5 stocks
 RISK_PER_TRADE_PCT = 0.02   # stop loss = 2% below entry
 PROFIT_TARGET_PCT  = 0.04   # take profit = 4% above entry
 RSI_OVERSOLD       = 35     # buy signal threshold
