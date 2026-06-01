@@ -28,8 +28,8 @@ from alpaca.data.timeframe import TimeFrame
 # ─────────────────────────────────────────────
 # CONFIG — your Alpaca paper trading credentials
 # ─────────────────────────────────────────────
-API_KEY    = "AK573FSHB77TC5NR7F3Y42CDGK"
-SECRET_KEY = "Eva2MW9WdmYgpyANP8jShRTJ1w6hQ9J"
+API_KEY    = "AKTPKV5ZZVT5TQ5KFXTKO3K225"
+SECRET_KEY = "AKDDc4rPH8kc2hxA7ayrBcQX7moF1HFUtZG4UKVCT3UX"
 PAPER      = False  # ← LIVE trading with real money
 
 # ─────────────────────────────────────────────
