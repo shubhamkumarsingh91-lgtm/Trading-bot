@@ -181,12 +181,12 @@ def get_signal(symbol: str) -> str:
 
         log.info(f"[{symbol}] Price=${price:.2f} | RSI={rsi} | MA{MA_SHORT}={ma_short:.2f} | MA{MA_LONG}={ma_long:.2f}")
 
-        # BUY: RSI oversold + short MA crossing above long MA
-        if rsi < RSI_OVERSOLD and ma_short > ma_long:
+        # BUY: Momentum strategy — MA9 above MA21 + RSI not extremely overbought
+        if ma_short > ma_long and rsi < 75:
             return "BUY"
 
-        # SELL: RSI overbought + short MA crossing below long MA
-        if rsi > RSI_OVERBOUGHT and ma_short < ma_long:
+        # SELL: MA9 crosses below MA21 OR RSI extremely overbought
+        if ma_short < ma_long or rsi > 85:
             return "SELL"
 
         return "HOLD"
