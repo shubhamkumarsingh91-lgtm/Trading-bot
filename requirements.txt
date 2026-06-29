@@ -2,4 +2,3 @@ alpaca-py
 pandas
 numpy
 schedule
-requests
