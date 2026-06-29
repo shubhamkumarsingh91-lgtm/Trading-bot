@@ -36,8 +36,8 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 #  CONFIG  ← only edit this section
 # ══════════════════════════════════════════════════════════════
 
-API_KEY    = "AKYIZUY2SME3EDIGMM24BQAPSH"
-SECRET_KEY = "DDz6LU4WVPFicigChCYtrGAAJxb2PPf8e"
+API_KEY    = "AKY4VXSWEKQMSQESHZW7RWMER3"
+SECRET_KEY = "pc8ktPALExaPbUKpFz4CPJ4wFiWSEWnFfHSKmSPBYj3"
 PAPER      = False   # False = real money, True = paper/fake money
 
 # ── WATCHLIST ─────────────────────────────────────────────────
