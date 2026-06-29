@@ -32,6 +32,23 @@ body::after{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;
 .cfg-remember{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:11px;color:var(--dim);cursor:pointer;}
 .cfg-remember input{accent-color:var(--cyan);}
 .cfg-label{font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;margin-bottom:6px;}
+/* MODE TOGGLE */
+.mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px;}
+.mode-btn{padding:10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--dim);font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;}
+.mode-btn.active.live{background:rgba(255,51,102,0.12);border-color:rgba(255,51,102,0.4);color:var(--red);}
+.mode-btn.active.paper{background:rgba(0,255,136,0.12);border-color:rgba(0,255,136,0.4);color:var(--green);}
+.mode-btn:not(.active):hover{border-color:var(--border3);color:var(--text);}
+/* ACCOUNT SWITCHER (in header) */
+.acct-switcher{display:flex;gap:6px;}
+.acct-sw-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;font-family:'Inter',sans-serif;font-size:10px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.5px;}
+.acct-sw-btn.live{color:var(--red);}
+.acct-sw-btn.paper{color:var(--green);}
+.acct-sw-btn.active.live{background:rgba(255,51,102,0.12);border-color:rgba(255,51,102,0.4);}
+.acct-sw-btn.active.paper{background:rgba(0,255,136,0.12);border-color:rgba(0,255,136,0.4);}
+.acct-sw-btn:not(.active):hover{border-color:var(--border2);}
+/* PAPER badge */
+.paper-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.25);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;display:none;}
+.paper-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:livepulse 2s ease infinite;}
 .cfg-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-family:'JetBrains Mono',monospace;font-size:12px;padding:11px 14px;margin-bottom:16px;outline:none;transition:border-color .2s;}
 .cfg-input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,212,255,0.1);}
 .cfg-btn{width:100%;padding:13px;background:linear-gradient(135deg,var(--cyan2),var(--purple));color:#fff;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;border:none;border-radius:8px;cursor:pointer;transition:opacity .2s,transform .1s;}
@@ -255,17 +272,24 @@ body::after{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;
       <div class="cfg-icon">⚡</div>
       <div>
         <div class="cfg-title">Trading <span>Intelligence</span></div>
-        <div class="cfg-sub">Connect to your Alpaca live account</div>
+        <div class="cfg-sub" id="cfgSub">Connect to your Alpaca account</div>
       </div>
+    </div>
+    <div class="cfg-label">Account Mode</div>
+    <div class="mode-toggle">
+      <button class="mode-btn live active" id="modeLive" onclick="setMode('live')">🔴 LIVE MONEY</button>
+      <button class="mode-btn paper" id="modePaper" onclick="setMode('paper')">🟢 PAPER TRADING</button>
     </div>
     <div class="cfg-label">Alpaca API Key</div>
     <input class="cfg-input" id="cfgKey" type="text" placeholder="Your API key" />
     <div class="cfg-label">Secret Key</div>
     <input class="cfg-input" id="cfgSecret" type="password" placeholder="Your secret key" />
-    <div class="cfg-label">Endpoint</div>
-    <input class="cfg-input" id="cfgBase" type="text" value="https://api.alpaca.markets" />
+    <div id="cfgBaseWrap">
+      <div class="cfg-label">Endpoint <span style="color:var(--dimmer);font-weight:400">(auto-set by mode)</span></div>
+      <input class="cfg-input" id="cfgBase" type="text" value="https://api.alpaca.markets" />
+    </div>
     <label class="cfg-remember"><input type="checkbox" id="cfgRemember" checked> Remember me on this device</label>
-    <button class="cfg-btn" id="cfgBtn" onclick="connect()">CONNECT TO LIVE ACCOUNT →</button>
+    <button class="cfg-btn" id="cfgBtn" onclick="connect()">CONNECT →</button>
     <div class="cfg-err" id="cfgErr"></div>
   </div>
 </div>
@@ -293,7 +317,14 @@ body::after{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;
       <div class="hdr-pv-chg" id="hdrDayChg">—</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px" class="hdr-status">
-      <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div class="live-badge" id="liveBadge"><div class="live-dot"></div> LIVE</div>
+        <div class="paper-badge" id="paperBadge"><div class="paper-dot"></div> PAPER</div>
+        <div class="acct-switcher">
+          <button class="acct-sw-btn live active" id="swLive" onclick="switchAccount('live')">LIVE</button>
+          <button class="acct-sw-btn paper" id="swPaper" onclick="switchAccount('paper')">PAPER</button>
+        </div>
+      </div>
       <div class="hdr-clock" id="clock">—</div>
       <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
     </div>
@@ -527,6 +558,32 @@ body::after{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;
 <script>
 // ── CREDENTIALS (localStorage) ─────────────────────────────
 const CRED_KEY = 'alpaca_creds_v2';
+const PAPER_CRED_KEY = 'alpaca_paper_creds_v2';
+let currentMode = 'live'; // 'live' | 'paper'
+
+function setMode(mode) {
+  currentMode = mode;
+  const isLive = mode === 'live';
+  document.getElementById('modeLive').className = 'mode-btn live' + (isLive ? ' active' : '');
+  document.getElementById('modePaper').className = 'mode-btn paper' + (!isLive ? ' active' : '');
+  const base = isLive ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets';
+  document.getElementById('cfgBase').value = base;
+  document.getElementById('cfgSub').textContent = isLive ? 'Connect to your real money account' : 'Connect to your paper trading account';
+  // pre-fill saved creds for this mode
+  try {
+    const key = isLive ? CRED_KEY : PAPER_CRED_KEY;
+    const s = localStorage.getItem(key);
+    if (s) {
+      const d = JSON.parse(s);
+      document.getElementById('cfgKey').value = d.key || '';
+      document.getElementById('cfgSecret').value = d.secret || '';
+    } else {
+      document.getElementById('cfgKey').value = '';
+      document.getElementById('cfgSecret').value = '';
+    }
+  } catch(e) {}
+}
+
 (function loadSaved() {
   try {
     const s = localStorage.getItem(CRED_KEY);
@@ -635,9 +692,14 @@ async function connect() {
   try {
     const acct = await alp('/v2/account');
     if (acct.id) {
+      const storageKey = currentMode === 'live' ? CRED_KEY : PAPER_CRED_KEY;
       if (document.getElementById('cfgRemember').checked) {
-        localStorage.setItem(CRED_KEY, JSON.stringify({key:API_KEY, secret:SECRET, base:BASE}));
+        localStorage.setItem(storageKey, JSON.stringify({key:API_KEY, secret:SECRET, base:BASE}));
       }
+      // Show right badge
+      document.getElementById('liveBadge').style.display = currentMode === 'live' ? '' : 'none';
+      document.getElementById('paperBadge').style.display = currentMode === 'paper' ? '' : 'none';
+      updateAccountSwitcher();
       document.getElementById('configOverlay').style.display = 'none';
       document.getElementById('mainContent').style.display = 'block';
       document.getElementById('tickerWrap').style.display = 'block';
@@ -652,8 +714,46 @@ async function connect() {
   } catch(e) {
     err.textContent = '⚠ ' + e.message + ' — check your keys';
     err.style.display = 'block';
-    btn.textContent = 'CONNECT TO LIVE ACCOUNT →';
+    btn.textContent = 'CONNECT →';
   }
+}
+
+// ── ACCOUNT SWITCHER ───────────────────────────────────────
+function updateAccountSwitcher() {
+  document.getElementById('swLive').className = 'acct-sw-btn live' + (currentMode==='live'?' active':'');
+  document.getElementById('swPaper').className = 'acct-sw-btn paper' + (currentMode==='paper'?' active':'');
+  const hdrSub = document.querySelector('.hdr-sub');
+  if (hdrSub) hdrSub.textContent = currentMode === 'live'
+    ? 'Alpaca Live · Multi-Legend Day Trading Bot'
+    : 'Alpaca Paper · Simulated Trading Mode';
+}
+
+async function switchAccount(mode) {
+  if (mode === currentMode) return;
+  const storageKey = mode === 'live' ? CRED_KEY : PAPER_CRED_KEY;
+  const saved = localStorage.getItem(storageKey);
+  if (saved) {
+    // Auto-switch if we have saved creds
+    try {
+      const d = JSON.parse(saved);
+      API_KEY = d.key; SECRET = d.secret; BASE = d.base;
+      currentMode = mode;
+      document.getElementById('liveBadge').style.display = mode === 'live' ? '' : 'none';
+      document.getElementById('paperBadge').style.display = mode === 'paper' ? '' : 'none';
+      updateAccountSwitcher();
+      loadData();
+    } catch(e) { showConfigForMode(mode); }
+  } else {
+    // Need to enter creds for this mode
+    showConfigForMode(mode);
+  }
+}
+
+function showConfigForMode(mode) {
+  currentMode = mode;
+  setMode(mode);
+  document.getElementById('configOverlay').style.display = 'flex';
+  document.getElementById('mainContent').style.display = 'none';
 }
 
 // ── BOT STATUS ─────────────────────────────────────────────
