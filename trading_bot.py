@@ -43,12 +43,9 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 #  CONFIG
 # ══════════════════════════════════════════════════════════════
 
-API_KEY    = os.environ.get("ALPACA_API_KEY", "").strip()
-SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "").strip()
+API_KEY    = "AKYIZUY2SME3EDIGMM24BQAPSH"
+SECRET_KEY = "DDz6LU4WVPFicigChCYtrGAAJxb2PPf8e"
 PAPER      = False   # ← True = paper money, False = real money
-
-if not API_KEY or not SECRET_KEY:
-    raise ValueError("Set ALPACA_API_KEY and ALPACA_SECRET_KEY environment variables first.")
 
 print(f"[BOOT] Key: {API_KEY[:4]}... ({len(API_KEY)} chars)  Secret: {SECRET_KEY[:4]}... ({len(SECRET_KEY)} chars)")
 
